@@ -82,10 +82,8 @@ float kapacita2 =0.0;
 float watthodiny =0.0;
 float watthodiny1 =0.0;
 float watthodiny2 =0.0;
-volatile uint32_t msec=0;
-float sek=0;
-float min=0;
-float hod=0;
+volatile uint32_t sec=0;
+volatile uint32_t hod=0;
 // NABITIE BATERKY V % ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 float prepocet=0.0;
 float vysledok=0.0;
@@ -336,9 +334,9 @@ if(Ethernet.begin(mac)==0){ Ethernet.begin(mac,ip); }
                                    if(prepocet<0){lcd.print("BATERIA VYBITA !!! ");}
                                    else if(prepocet>2.4){lcd.print("BATERIA NABITA !!! ");}
                                    else{lcd.write(byte(4));lcd.print(":");lcd.print(vysledok,2);lcd.print("%         ");printSpace(vysledok);} break;
-                            case 3: lcd.print(sek);lcd.print(" sekundy");break;
-                            case 4: lcd.print(min);lcd.print(" minuty   "); break;
-                            case 5: lcd.print(hod);lcd.print(" hodiny   "); break;       
+                            case 3: lcd.print(hod);lcd.print(" hodiny");break;
+                            case 4: lcd.print(hod);lcd.print(" hodiny"); break;
+                            case 5: lcd.print(hod);lcd.print(" hodiny"); break;       
                             
                 }
       break;    
@@ -380,10 +378,8 @@ else{napatie3=0;}
     napatieprud2 = analog2 * 4.8828125; // prepocet napatia na prud podla informacii od vyrobcu
     prud2 = (napatieprud2 - offset) / konstanta;
 // VYPOCET OSTATNYCH VELICIN //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  msec = millis();
-  sek = msec/1000;
-  min = sek/60;
-  hod = min/60;
+  sec = millis()/1000;
+  hod = millis()/3600000;
   vykon = napatie3*prud;
   vykon1 = napatie2*prud1; 
   vykon2 = napatie*prud2;   
@@ -517,7 +513,7 @@ if(readString=="ZAP"){
 
   if (client.connect(server, 80)) {               // AK SA NAPOJI NA SERVER NA PORTE 80 (HTTP)
     client.print("GET /Mano/arduino/zapistabulku.php?solarnapatie=");         
-    client.print(hod);   
+    client.print(napatie3);   
     client.print("&solarprud=");                     
     client.print(prud);    
     client.print("&solarvykon=");                      
@@ -546,6 +542,8 @@ if(readString=="ZAP"){
     client.print(kapacita2); 
     client.print("&spotrebicwh=");                    
     client.print(watthodiny2); 
+    client.print("&cas=");               
+    client.print(sec);
     client.print("&siet=");  
 if (digitalRead(RELE) == 0){client.print("VYP");}else{client.print("ZAP");}
     client.println(" HTTP/1.1");                 // UKONCENIE REQUESTU ZALOMENIM RIADKA A DOPLNENIM HLAVICKY HTTP S VERZIOU
