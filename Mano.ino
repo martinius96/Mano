@@ -4,7 +4,13 @@
 #include <SPI.h>                     //kniznica SPI podporuje aj I2C pripojenie
 #include <Ethernet.h>                //kniznica k ethernet shieldu
 // DEFINOVANIE CASOV PREMENNYCH ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-#define ODOZVA   50 // casova odozva nizsie ignoruje zmenu stavu tlacitka, enkodera
+#define cislo 50 //pocet merani napatia 1
+#define cislo1 50 //pocet merani napatia 2
+#define cislo2 50 //pocet merani prudu 1
+#define cislo3 50 //pocet merani prudu 2
+#define cislo4 50 //pocet merani prudu 3
+#define ODOZVA   50 // casova odozva nizsie ignoruje zmenu stavu tlacitka
+#define ctlDT    50  //kontrolný čas (ms),pre citanie hodnoty enkodera 
 #define cas      10000 // cas vypnutia displej
 #define cas2     2000 // cas vypnutia BAT RELE
 // DEFINOVANIE PINOV PREMENNYCH ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -43,6 +49,8 @@ LiquidCrystal_I2C lcd(0x27, 20, 4); // Nastavenie adresy 0x27 a počet znakov a 
 #define eepromAddr 0
 // KONSTANTY NA VYPOCET NAPATIA 1 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 float vst_napatie =0.0;
+float r1=6800.0;
+float r2=3200.0;
 float napatie;
 // KONSTANTY NA VYPOCET NAPATIA 2 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 float napatie1;
@@ -58,14 +66,23 @@ int offset = 2500;// premenna na nastavenie offsetu, polovina Vcc
 int analog= 0;
 float napatieprud = 0.0;
 float prud =0.0;
+float spolu = 0.0;
 // KONSTANTY NA VYPOCET PRUDU 2 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+int timer1;
+int konstanta1 = 100; // konstanta na prepočet nameraného napätia na prud pouzijeme 100 pre 20A verziu
+int offset1 = 2500;// premenna na nastavenie offsetu, polovina Vcc
 int analog1= 0;
 float napatieprud1 = 0.0;
 float prud1 =0.0;
+float spolu1 = 0.0;
 // KONSTANTY NA VYPOCET PRUDU 3 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+int timer2;
+int konstanta2 = 100; // konstanta na prepočet nameraného napätia na prud pouzijeme 100 pre 20A verziu
+int offset2 = 2500;// premenna na nastavenie offsetu, polovina Vcc
 int analog2= 0;
 float napatieprud2 = 0.0;
 float prud2 =0.0;
+float spolu2 = 0.0;
 // VYPOCET OSTATNYCH VELICIN //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 float vykon =0.0;
 float vykon1 =0.0;
@@ -82,8 +99,10 @@ float kapacita2 =0.0;
 float watthodiny =0.0;
 float watthodiny1 =0.0;
 float watthodiny2 =0.0;
-volatile uint32_t sec=0;
-volatile uint32_t hod=0;
+float msec=0;
+float sek=0;
+float min=0;
+float hod=0;
 // NABITIE BATERKY V % ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 float prepocet=0.0;
 float vysledok=0.0;
@@ -96,7 +115,7 @@ int stateSteady=1;
 // AUTOMATICKE ODPAJANIE SPOTREBICOV //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int a=1;
 int err_prev=0;
-volatile uint32_t err_millis=0;
+int err_millis=0;
 //PREMENNE TLACIDLA ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool  MinulyStav = 1;  // priznak predchadzajuceho stavu tlacidla (0 .. stisnute)
 bool  MinulyStav1 = 1;  // priznak predchadzajuceho stavu tlacidla1 (0 .. stisnute)
@@ -113,6 +132,8 @@ volatile uint8_t dispPos = 1;
 volatile uint8_t prevPos = 1;
 volatile uint8_t dispSW = 1;
 volatile uint32_t ctlTime = 0;
+volatile uint32_t Time = 0;
+volatile uint32_t Time1 = 0;
 // POLIA PRE ZOBRAZENIE HODNOT NA DISPLEJ /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int poleznak[] = {0,10,0,10,0,10,0,19};
 int poleriadok[] = {0,0,1,1,2,2,3};
@@ -218,7 +239,7 @@ void setup() {
 // ROTACIA PRE ENKODER ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void encRot() 
 {
-if(((millis()-ctlTime) > ODOZVA) && (dispPos == 0))
+if(((millis()-ctlTime) > ctlDT) && (dispPos == 0))
   { prevPos = Pos;
      if(digitalRead(encB)) { if(Pos < 6){ Pos++; } else { Pos=0; } }
     else{ if(Pos >0){ Pos--; } else { Pos=6; } }
@@ -230,7 +251,7 @@ if(((millis()-ctlTime) > ODOZVA) && (dispPos == 0))
 }
 // TLACIDLO ENKODERA //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void encPush(){ //switch ISR
-  if(((millis()-ctlTime) > ODOZVA) && (dispSW == 0)) 
+  if(((millis()-ctlTime) > ctlDT) && (dispSW == 0)) 
   {
    if(poleVelicina[Pos]<5) { poleVelicina[Pos]++; } else { poleVelicina[Pos] = 1; }
     dispSW = 1;
@@ -334,9 +355,9 @@ if(Ethernet.begin(mac)==0){ Ethernet.begin(mac,ip); }
                                    if(prepocet<0){lcd.print("BATERIA VYBITA !!! ");}
                                    else if(prepocet>2.4){lcd.print("BATERIA NABITA !!! ");}
                                    else{lcd.write(byte(4));lcd.print(":");lcd.print(vysledok,2);lcd.print("%         ");printSpace(vysledok);} break;
-                            case 3: lcd.print(hod);lcd.print(" hodiny");break;
-                            case 4: lcd.print(hod);lcd.print(" hodiny"); break;
-                            case 5: lcd.print(hod);lcd.print(" hodiny"); break;       
+                            case 3: lcd.print(sek);lcd.print(" sekundy");break;
+                            case 4: lcd.print(min);lcd.print(" minuty   "); break;
+                            case 5: lcd.print(hod);lcd.print(" hodiny   "); break;       
                             
                 }
       break;    
@@ -345,8 +366,8 @@ if(Ethernet.begin(mac)==0){ Ethernet.begin(mac,ip); }
   }
 // VYPOCET MERANEHO NAPATIA 1 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   int analog_value = analogRead(napatiepin);
-    vst_napatie = analog_value * 0.0048828125; 
-   napatie = (vst_napatie / 0.32);
+    vst_napatie = analog_value * (5.0/ 1024.0); 
+   napatie = (vst_napatie / (r2/(r1+r2)));
    if(napatie<0){
     napatie=0;
     } 
@@ -362,24 +383,46 @@ if(Ethernet.begin(mac)==0){ Ethernet.begin(mac,ip); }
 if(prud>0.1){napatie3=napatie2+2;}
 else{napatie3=0;}
 // VYPOCET MERANEHO PRUDU 1 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+  spolu=0;
+  for(i=0;i<cislo2;i++){ // 50 meraní pre ustálenie výsMOSFETku 
      analog = analogRead(prudpin);// nacitanie hodnoty analogového vstupu
-     napatieprud = analog * 4.8828125;  // prepocet napatia na prud podla informacii od vyrobcu
+     napatieprud = (analog * 5000.0) / 1024.0;  // prepocet napatia na prud podla informacii od vyrobcu
      prud = (napatieprud - offset) / konstanta;
-    
+     spolu += prud;
+    }
+  prud = (spolu/50);
   if(prud<0){
     prud=0;
   }
 //VYPOCET MERANEHO PRUDU 2 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+  spolu1=0;
+  for(i=0;i<cislo3;i++){ // 50 meraní pre ustálenie výsMOSFETku 
     analog1 = analogRead(prudpin1); // nacitanie hodnoty analogového vstupu
-    napatieprud1 = analog1 * 4.8828125; // prepocet napatia na prud podla informacii od vyrobcu
-    prud1 = (napatieprud1 - offset) / konstanta;  
+    napatieprud1 = (analog1 * 5000.0) / 1024.0; // prepocet napatia na prud podla informacii od vyrobcu
+    prud1 = (napatieprud1 - offset1) / konstanta1;
+    spolu1 += prud1; 
+  }
+  prud1 = ((spolu1/50)*(-1));
+  /*if(prud1<0){
+    prud1=0;
+  } */
 //VYPOCET MERANEHO PRUDU 2 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+  spolu2=0;
+  for(i=0;i<cislo4;i++){ // 50 meraní pre ustálenie výsMOSFETku 
     analog2 = analogRead(prudpin2); // nacitanie hodnoty analogového vstupu
-    napatieprud2 = analog2 * 4.8828125; // prepocet napatia na prud podla informacii od vyrobcu
-    prud2 = (napatieprud2 - offset) / konstanta;
+    napatieprud2 = (analog2 * 5000.0) / 1024.0; // prepocet napatia na prud podla informacii od vyrobcu
+    prud2 = (napatieprud2 - offset2) / konstanta2;
+    spolu2 += prud2; 
+  }
+  prud2 = ((spolu2/50)*(-1));
+  /*if(prud2<0){
+    prud2=0;
+  } */
 // VYPOCET OSTATNYCH VELICIN //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  sec = millis()/1000;
-  hod = millis()/3600000;
+  msec = millis();
+  sek = msec/1000;
+  min = sek/60;
+  hod = min/60;
   vykon = napatie3*prud;
   vykon1 = napatie2*prud1; 
   vykon2 = napatie*prud2;   
@@ -513,7 +556,7 @@ if(readString=="ZAP"){
 
   if (client.connect(server, 80)) {               // AK SA NAPOJI NA SERVER NA PORTE 80 (HTTP)
     client.print("GET /Mano/arduino/zapistabulku.php?solarnapatie=");         
-    client.print(napatie3);   
+    client.print(hod);   
     client.print("&solarprud=");                     
     client.print(prud);    
     client.print("&solarvykon=");                      
@@ -542,8 +585,6 @@ if(readString=="ZAP"){
     client.print(kapacita2); 
     client.print("&spotrebicwh=");                    
     client.print(watthodiny2); 
-    client.print("&cas=");               
-    client.print(sec);
     client.print("&siet=");  
 if (digitalRead(RELE) == 0){client.print("VYP");}else{client.print("ZAP");}
     client.println(" HTTP/1.1");                 // UKONCENIE REQUESTU ZALOMENIM RIADKA A DOPLNENIM HLAVICKY HTTP S VERZIOU
